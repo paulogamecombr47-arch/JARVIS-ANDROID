@@ -1,0 +1,247 @@
+package com.jarvis.android;
+
+import android.Manifest;
+import android.app.Activity;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.os.Bundle;
+import android.speech.RecognizerIntent;
+import android.speech.RecognitionListener;
+import android.speech.SpeechRecognizer;
+import android.speech.tts.TextToSpeech;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.view.Gravity;
+import android.widget.Button;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+import java.util.ArrayList;
+
+public class MainActivity extends Activity implements RecognitionListener {
+
+    private TextView status, heard, answer;
+    private SpeechRecognizer recognizer;
+    private TextToSpeech tts;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        createInterface();
+
+        tts = new TextToSpeech(this, result -> {
+            if (result != TextToSpeech.ERROR) {
+                tts.setLanguage(new Locale("pt", "BR"));
+            }
+        });
+
+        if (SpeechRecognizer.isRecognitionAvailable(this)) {
+            recognizer = SpeechRecognizer.createSpeechRecognizer(this);
+            recognizer.setRecognitionListener(this);
+        } else {
+            status.setText("Reconhecimento de voz indisponível.");
+        }
+
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(
+                new String[]{Manifest.permission.RECORD_AUDIO}, 10
+            );
+        }
+    }
+
+    private void createInterface() {
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setGravity(Gravity.CENTER);
+        layout.setPadding(28, 35, 28, 28);
+        layout.setBackgroundColor(Color.rgb(5, 12, 25));
+
+        TextView title = new TextView(this);
+        title.setText("J.A.R.V.I.S.");
+        title.setTextSize(34);
+        title.setTextColor(Color.rgb(60, 210, 255));
+        title.setTypeface(null, Typeface.BOLD);
+        title.setGravity(Gravity.CENTER);
+
+        status = makeText("Sistemas inicializados.");
+        heard = makeText("Você: —");
+        answer = makeText("JARVIS: À sua disposição.");
+
+        Button talk = new Button(this);
+        talk.setText("FALAR COM JARVIS");
+        talk.setOnClickListener(v -> listen());
+
+        Button test = new Button(this);
+        test.setText("TESTAR VOZ");
+        test.setOnClickListener(v ->
+            speak("Olá, senhor. Estou funcionando.")
+        );
+
+        layout.addView(title);
+        layout.addView(status);
+        layout.addView(heard);
+        layout.addView(answer);
+        layout.addView(talk);
+        layout.addView(test);
+
+        setContentView(layout);
+    }
+
+    private TextView makeText(String value) {
+        TextView text = new TextView(this);
+        text.setText(value);
+        text.setTextSize(17);
+        text.setTextColor(Color.WHITE);
+        text.setPadding(5, 20, 5, 15);
+        return text;
+    }
+
+    private void listen() {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(
+                new String[]{Manifest.permission.RECORD_AUDIO}, 10
+            );
+            return;
+        }
+
+        if (recognizer == null) return;
+
+        Intent intent = new Intent(
+            RecognizerIntent.ACTION_RECOGNIZE_SPEECH
+        );
+
+        intent.putExtra(
+            RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+            RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+        );
+
+        intent.putExtra(
+            RecognizerIntent.EXTRA_LANGUAGE,
+            "pt-BR"
+        );
+
+        status.setText("Estou ouvindo...");
+        recognizer.startListening(intent);
+    }
+
+    @Override
+    public void onResults(Bundle results) {
+        ArrayList<String> matches =
+            results.getStringArrayList(
+                SpeechRecognizer.RESULTS_RECOGNITION
+            );
+
+        if (matches != null && !matches.isEmpty()) {
+            processCommand(matches.get(0));
+        }
+    }
+
+    private void processCommand(String text) {
+        heard.setText("Você: " + text);
+
+        String command = text.toLowerCase(new Locale("pt", "BR"));
+        String response;
+
+        if (command.contains("hora")) {
+            response = "Agora são " +
+                new SimpleDateFormat("HH:mm", Locale.getDefault())
+                .format(new Date());
+
+        } else if (command.contains("data")) {
+            response = "Hoje é " +
+                new SimpleDateFormat(
+                    "dd 'de' MMMM 'de' yyyy",
+                    new Locale("pt", "BR")
+                ).format(new Date());
+
+        } else if (command.contains("olá") ||
+                   command.contains("oi")) {
+            response = "Olá, senhor. Como posso ajudar?";
+
+        } else if (command.contains("seu nome") ||
+                   command.contains("quem é você")) {
+            response = "Sou o JARVIS, seu assistente pessoal.";
+
+        } else if (command.contains("comandos") ||
+                   command.contains("ajuda")) {
+            response = "Posso informar a hora, a data e responder saudações.";
+
+        } else {
+            response = "Comando ainda não disponível. Estou aprendendo.";
+        }
+
+        answer.setText("JARVIS: " + response);
+        status.setText("Pronto.");
+        speak(response);
+    }
+
+    private void speak(String message) {
+        if (tts != null) {
+            tts.speak(
+                message,
+                TextToSpeech.QUEUE_FLUSH,
+                null,
+                "jarvis"
+            );
+        }
+    }
+
+    @Override
+    public void onReadyForSpeech(Bundle params) {
+        status.setText("Pode falar, estou ouvindo.");
+    }
+
+    @Override
+    public void onBeginningOfSpeech() {
+        status.setText("Reconhecendo sua voz...");
+    }
+
+    @Override
+    public void onEndOfSpeech() {
+        status.setText("Processando...");
+    }
+
+    @Override
+    public void onError(int error) {
+        status.setText("Não consegui reconhecer. Tente novamente.");
+    }
+
+    @Override public void onRmsChanged(float rmsdB) {}
+    @Override public void onBufferReceived(byte[] buffer) {}
+    @Override public void onPartialResults(Bundle results) {}
+    @Override public void onEvent(int eventType, Bundle params) {}
+
+    @Override
+    public void onRequestPermissionsResult(
+        int requestCode,
+        String[] permissions,
+        int[] grantResults
+    ) {
+        super.onRequestPermissionsResult(
+            requestCode, permissions, grantResults
+        );
+
+        if (requestCode == 10 && grantResults.length > 0 &&
+            grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            status.setText("Microfone autorizado. JARVIS pronto.");
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (recognizer != null) recognizer.destroy();
+
+        if (tts != null) {
+            tts.stop();
+            tts.shutdown();
+        }
+
+        super.onDestroy();
+    }
+}
